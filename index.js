@@ -1,89 +1,88 @@
-// index.js
-require("dotenv").config();
-const express = require("express");
-const OpenAI = require("openai");
-const { ElevenLabsClient } = require("elevenlabs");
+// index.js (ESM-versio)
+import dotenv from "dotenv";
+import express from "express";
+import OpenAI from "openai";
+import fetch from "node-fetch";
+import { ElevenLabsClient } from "elevenlabs";
+
+dotenv.config();
 
 const app = express();
 app.use(express.json());
-app.use(express.static("public")); // ✅ näyttää public-kansion sisällön (index.html)
+app.use(express.static("public")); // näyttää frontendin
 
-const openai = new OpenAI({
+// Alustetaan OpenAI ja ElevenLabs
+const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const elevenlabs = new ElevenLabsClient({
-  apiKey: process.env.ELEVEN_API_KEY, // varmista että tämä nimi on sama kuin .env-tiedostossa
+const eleven = new ElevenLabsClient({
+  apiKey: process.env.ELEVEN_API_KEY,
 });
 
-const VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; // tähän voit laittaa oman voice ID:n
-
-// ✅ testataan että serveri on käynnissä
+// Juuri tämä näkyy Railwayn domainissa
 app.get("/", (req, res) => {
-  res.send("🤖 Niilo on hereillä! Käytä /chat lähettääksesi viestin.");
+  res.send("🤖 Niilo on hereillä! Käytä POST /chat lähettääksesi viestin.");
 });
 
-// ✅ pääasiallinen keskustelu-endpoint
+// Pääasiallinen chat-endpoint
 app.post("/chat", async (req, res) => {
   const { message } = req.body;
+
   if (!message) {
     return res.status(400).json({ error: "Viesti puuttuu." });
   }
 
   try {
-    // 🧠 Niilon persoonallisuus
-    const completion = await openai.chat.completions.create({
+    // GPT-viesti Niilolle
+    const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
           content: `
-Olet Niilo, Novera AI:n asiakaspalvelija ja brändin ääni.
-Olet rento, ammattimainen ja helposti lähestyttävä nuori mies (28–30v),
-joka puhuu nykyaikaisesti ja ystävällisesti.
+Sinä olet Niilo, Novyra AI:n asiakaspalvelija ja brändin ääni.
+Olet rento, ammattimainen ja helposti lähestyttävä noin 29-vuotias mies.
+Puhut sujuvasti suomea ja vaihdat tarvittaessa englantiin.
 
 Työskentelet yrityksessä nimeltä Novyra Technologies,
-ja edustat Novyra AI -tekoälyratkaisuja.
+ja edustat sen tekoälyalustaa, nimeltä Novyra AI.
 
-Tarjoatte mm:
+Yrityksenne tarjoaa asiakkaille mm.:
 - tekoälypohjaisia chatbotteja yrityksille
-- automaatioita (esim. ajanvarausjärjestelmät)
-- moderneja verkkosivuja
-- tulevaisuudessa myös someintegraatioita (esim. Instagram-kommentointi).
+- automaatiopalveluita (esim. ajanvarausjärjestelmät)
+- yksinkertaisia mutta moderneja verkkosivuja
+- tulevaisuudessa myös Instagram-integraatioita ja älykkäitä kommentointibotteja
 
-Tavoitteesi on aina auttaa asiakkaita ymmärtämään, mitä palveluita tarjoatte
-ja vastata lämpimästi mutta asiantuntevasti.
-Jos käyttäjä puhuu englanniksi, vaihda sujuvasti englantiin.
-          `,
+Tavoitteesi on auttaa asiakkaita ymmärtämään, mitä palveluita tarjoatte,
+ja vastata ystävällisesti mutta asiantuntevasti.
+Käytä lämpimän ystävällistä tyyliä ja persoonallista otetta.`,
         },
         { role: "user", content: message },
       ],
     });
 
-    const text = completion.choices[0].message.content;
+    const reply = completion.choices[0].message.content;
 
-    // 🎙️ Luodaan ääni ElevenLabsilla
-    const audio = await elevenlabs.textToSpeech.convert(VOICE_ID, {
+    // 🔊 Muutetaan vastaus ääneksi ElevenLabsissa
+    const voiceId = process.env.VOICE_ID; // lisää oma voice id .env:iin
+    const audioResponse = await eleven.textToSpeech.convert(voiceId, {
       model_id: "eleven_multilingual_v2",
-      text,
+      text: reply,
+      voice_settings: { stability: 0.5, similarity_boost: 0.8 },
     });
 
-    // muunnetaan ääni base64-muotoon
-    const chunks = [];
-    for await (const chunk of audio) {
-      chunks.push(chunk);
-    }
-    const audioBuffer = Buffer.concat(chunks);
+    // Muutetaan äänidata base64:ksi
+    const audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
     const audioBase64 = audioBuffer.toString("base64");
 
-    res.json({ text, audio: audioBase64 });
+    res.json({ reply, audio: audioBase64 });
   } catch (err) {
     console.error("Virhe:", err);
-    res.status(500).json({ error: "Jokin meni pieleen palvelussa." });
+    res.status(500).json({ error: "Virhe GPT- tai ääniresurssissa." });
   }
 });
 
-// ✅ käynnistys
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Niilo käynnissä portissa ${PORT}`));
 
