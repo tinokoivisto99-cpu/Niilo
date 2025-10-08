@@ -1,24 +1,27 @@
 // index.js
 require("dotenv").config();
 const express = require("express");
+const fetch = require("node-fetch");
 const OpenAI = require("openai");
-const fetch = require("node-fetch"); // tulevaa ElevenLabs-käyttöä varten
 
 const app = express();
 app.use(express.json());
-app.use(express.static("public")); // näyttää public/index.html -tiedoston
+app.use(express.static("public")); // näyttää public/index.html
 
-// OpenAI-yhteys
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Testi-endpoint (näkyy selaimessa Railwayn domainissa)
+// --- ElevenLabs API (ääni) asetukset ---
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+const VOICE_ID = "puhuja-id-tähän"; // tänne sun oikea Voice ID
+
+// Juuri tämä endpoint näkyy selaimessa Railwayn domainissa
 app.get("/", (req, res) => {
-  res.send("🤖 Niilo on hereillä! Käytä POST /chat lähettääksesi viestejä.");
+  res.send("🤖 Niilo on hereillä! Käytä POST /chat lähettääksesi viestin.");
 });
 
-// Pääasiallinen botti-endpoint (frontendin /chat kutsuu tätä)
+// Pääasiallinen botti-endpoint
 app.post("/chat", async (req, res) => {
   const { message } = req.body;
 
@@ -27,7 +30,7 @@ app.post("/chat", async (req, res) => {
   }
 
   try {
-    // Pyydetään vastaus OpenAI:lta
+    // --- OpenAI-vastaus ---
     const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -35,7 +38,7 @@ app.post("/chat", async (req, res) => {
           role: "system",
           content: `
 Sinä olet Niilo, Novera AI:n asiakaspalvelija ja brändin ääni.
-Olet rento, ammattimainen ja helposti lähestyttävä nuori mies (noin 28–30v),
+Olet rento, ammattimainen ja helposti lähestyttävä nuori mies (28-30v),
 joka puhuu selkeästi ja nykyaikaisesti.
 
 Työskentelet yrityksessä nimeltä Novyra Technologies,
@@ -48,8 +51,9 @@ Te tarjoatte asiakkaille mm:
 - ja tulevaisuudessa myös Instagram-integraatioita,
   joissa botti voi keskustella tai kommentoida postauksia.
 
-Tavoitteesi on aina auttaa asiakkaita ymmärtämään, mitä palveluja
-Novyra tarjoaa ja vastata ystävällisesti mutta asiantuntevasti.
+Tavoitteesi on aina auttaa asiakkaita ymmärtämään, mitä palveluita tarjoatte
+ja vastata ystävällisesti mutta asiantuntevasti.
+Käytä miellyttävää ja lämminhenkistä tyyliä.
 Jos käyttäjä puhuu englanniksi, vaihda sujuvasti englantiin.
           `,
         },
@@ -57,20 +61,40 @@ Jos käyttäjä puhuu englanniksi, vaihda sujuvasti englantiin.
       ],
     });
 
-    // Otetaan tekoälyn vastaus talteen
     const reply = completion.choices[0].message.content;
 
-    // Lähetetään vastaus frontendiin
-    res.json({ reply });
+    // --- ElevenLabs äänen generointi ---
+    const ttsResponse = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": ELEVENLABS_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: reply,
+          voice_settings: { stability: 0.4, similarity_boost: 0.7 },
+        }),
+      }
+    );
+
+    const audioBuffer = await ttsResponse.arrayBuffer();
+    const audioBase64 = Buffer.from(audioBuffer).toString("base64");
+
+    // 🔍 DEBUG – Tarkistetaan että ääni oikeasti generoitui
+    console.log("✅ Ääni generoitu, pituus:", audioBase64.length);
+
+    res.json({ reply, audio: audioBase64 });
   } catch (error) {
-    console.error("Virhe OpenAI-yhteydessä:", error);
-    res.status(500).json({ error: "Virhe OpenAI-yhteydessä." });
+    console.error("Virhe:", error);
+    res.status(500).json({ error: "Jotain meni pieleen palvelimessa." });
   }
 });
 
-// Käynnistetään palvelin
+// --- Portti ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✅ Niilo-palvelin käynnissä portissa ${PORT}`);
+  console.log(`Niilo on käynnissä portissa ${PORT}`);
 });
 
