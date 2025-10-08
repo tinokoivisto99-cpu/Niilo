@@ -1,13 +1,23 @@
 {
   "name": "uusi-botti",
   "version": "1.0.0",
-  "description": "",
+  "description": "Niilo – Novera AI:n asiakaspalvelubotti (Express + OpenAI + ElevenLabs)",
+  "type": "module",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "express",
+    "openai",
+    "chatbot",
+    "elevenlabs",
+    "ai",
+    "voice"
+  ],
+  "author": "Dimbero",
   "license": "ISC",
   "dependencies": {
     "dotenv": "^17.2.3",
@@ -15,5 +25,9 @@
     "express": "^5.1.0",
     "node-fetch": "^3.3.2",
     "openai": "^6.2.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   }
 }
+
