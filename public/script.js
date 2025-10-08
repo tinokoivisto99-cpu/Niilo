@@ -1,41 +1,26 @@
-const form = document.querySelector("form");
-const input = document.querySelector("#input");
-const chat = document.querySelector("#chat");
-
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
-
+document.getElementById("send").addEventListener("click", async () => {
+  const input = document.getElementById("input");
+  const chat = document.getElementById("chat");
   const message = input.value.trim();
   if (!message) return;
 
-  const userMsg = document.createElement("div");
-  userMsg.className = "msg user";
-  userMsg.textContent = `Sinä: ${message}`;
-  chat.appendChild(userMsg);
-
+  chat.innerHTML += `<div class="msg user">🧑‍💻 ${message}</div>`;
   input.value = "";
 
-  try {
-    const res = await fetch("/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
-    });
+  const res = await fetch("/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
 
-    const data = await res.json();
-    const reply = data.reply || "Niilo ei nyt vastannut...";
+  const data = await res.json();
+  chat.innerHTML += `<div class="msg bot">🤖 ${data.reply}</div>`;
+  chat.scrollTop = chat.scrollHeight;
 
-    const botMsg = document.createElement("div");
-    botMsg.className = "msg bot";
-    botMsg.textContent = `Niilo: ${reply}`;
-    chat.appendChild(botMsg);
-
-    chat.scrollTop = chat.scrollHeight;
-  } catch (err) {
-    const errMsg = document.createElement("div");
-    errMsg.className = "msg bot";
-    errMsg.textContent = "Niilo: Jokin meni pieleen 😅";
-    chat.appendChild(errMsg);
+  // 🎧 Jos ääni löytyy, toistetaan se
+  if (data.audio) {
+    const audio = new Audio(`data:audio/mpeg;base64,${data.audio}`);
+    audio.play();
   }
 });
 
