@@ -4,7 +4,8 @@ const express = require("express");
 const OpenAI = require("openai");
 
 const app = express();
-app.use(express.json()); // sallii JSON-datan vastaanoton
+app.use(express.json());
+app.use(express.static("public")); // näyttää public-kansion sisällön (frontend)
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
