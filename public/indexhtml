@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Niilo 🤖 | Novyra AI</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0d0d0d;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    h2 {
+      color: #00d1ff;
+    }
+    #chat {
+      width: 90%;
+      max-width: 500px;
+      background: #1a1a1a;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(255,255,255,0.1);
+      overflow-y: auto;
+      height: 60vh;
+      margin-bottom: 10px;
+    }
+    .msg { margin: 10px 0; }
+    .user { color: #00d1ff; }
+    .bot { color: #00ff95; }
+    #input {
+      width: 70%;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      outline: none;
+    }
+    #send {
+      padding: 10px 20px;
+      background: #00d1ff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      color: #111;
+      font-weight: bold;
+      margin-left: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Niilo 🤖 | Novyra AI</h2>
+  <div id="chat"></div>
+  <form>
+    <input id="input" placeholder="Kirjoita viesti..." />
+    <button id="send" type="submit">Lähetä</button>
+  </form>
+
+  <script src="script.js"></script>
+</body>
+</html>
+
