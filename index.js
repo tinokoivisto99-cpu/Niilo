@@ -2,22 +2,29 @@
 require("dotenv").config();
 const express = require("express");
 const OpenAI = require("openai");
-const fetch = require("node-fetch"); // varmistetaan että ElevenLabs toimii myöhemmin
+const fetch = require("node-fetch");
 
 const app = express();
 app.use(express.json());
-app.use(express.static("public")); // näyttää public/index.html käyttöliittymässä
+app.use(express.static("public")); // näyttää public/index.html selaimessa
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// ✅ Juuri tämä endpoint näkyy selaimessa Railwayn domainissa
+const elevenApiKey = process.env.ELEVEN_API_KEY;
+const voiceId = process.env.ELEVEN_VOICE_ID; // tämä haetaan .env:stä (ei suoraan tänne!)
+
+/**
+ * Juuri tämä näkyy Railwayn domainissa selaimessa
+ */
 app.get("/", (req, res) => {
   res.send("🤖 Niilo on hereillä! Käytä POST /chat lähettääksesi viestin.");
 });
 
-// ✅ Pääasiallinen botti-endpoint (frontendin /chat kutsuu tätä)
+/**
+ * Pääasiallinen botti-endpoint (frontend kutsuu tätä)
+ */
 app.post("/chat", async (req, res) => {
   const { message } = req.body;
 
@@ -26,6 +33,7 @@ app.post("/chat", async (req, res) => {
   }
 
   try {
+    // 1️⃣ OpenAI vastaa ensin tekstillä
     const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -33,22 +41,22 @@ app.post("/chat", async (req, res) => {
           role: "system",
           content: `
 Sinä olet Niilo, Novera AI:n asiakaspalvelija ja brändin ääni.
-Olet rento, ammattimainen ja helposti lähestyttävä nuori mies (28–30 v), 
-joka puhuu selkeästi ja nykyaikaisesti. 
+Olet rento, ammattimainen ja helposti lähestyttävä noin 28–30-vuotias nuori mies,
+joka puhuu selkeästi ja nykyaikaisesti.
 
-Työskentelet yrityksessä nimeltä Novera Technologies, 
-ja edustat Novera AI -tekoälyratkaisuja. 
+Työskentelet yrityksessä nimeltä **Novyra Technologies**,
+ja edustat **Novyra AI** -tekoälyratkaisuja.
 
 Te tarjoatte asiakkaille mm:
 - tekoälypohjaisia chatbotteja yrityksille
 - automaatiopalveluita (esim. ajanvarausjärjestelmät)
 - yksinkertaisia mutta moderneja verkkosivuja
-- ja tulevaisuudessa myös Instagram-integraatioita, 
+- tulevaisuudessa myös Instagram-integraatioita,
   joissa botti voi keskustella tai kommentoida postauksia.
 
-Tavoitteesi on aina auttaa asiakkaita ymmärtämään, mitä palveluita Novera AI tarjoaa,
+Tavoitteesi on auttaa asiakkaita ymmärtämään, mitä Novyra AI tarjoaa,
 ja vastata ystävällisesti mutta asiantuntevasti.
-Käytä miellyttävää ja lämminhenkistä tyyliä. 
+Käytä lämminhenkistä, helposti lähestyttävää tyyliä.
 Jos käyttäjä puhuu englanniksi, vaihda sujuvasti englantiin.
           `,
         },
@@ -57,14 +65,37 @@ Jos käyttäjä puhuu englanniksi, vaihda sujuvasti englantiin.
     });
 
     const reply = completion.choices[0].message.content;
-    res.json({ reply });
-  } catch (err) {
-    console.error("Virhe:", err);
-    res.status(500).json({ error: "Virhe GPT-pyynnössä." });
+
+    // 2️⃣ ElevenLabs muuttaa vastauksen ääneksi
+    const audioResponse = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": elevenApiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: reply,
+          voice_settings: { stability: 0.5, similarity_boost: 0.8 },
+        }),
+      }
+    );
+
+    const audioBuffer = await audioResponse.arrayBuffer();
+    const audioBase64 = Buffer.from(audioBuffer).toString("base64");
+
+    // 3️⃣ Palautetaan sekä teksti että ääni frontendille
+    res.json({
+      reply,
+      audio: `data:audio/mpeg;base64,${audioBase64}`,
+    });
+  } catch (error) {
+    console.error("Virhe /chat endpointissa:", error);
+    res.status(500).json({ error: "Jotain meni pieleen palvelimessa." });
   }
 });
 
-// ✅ Palvelin käynnistyy (Railway käyttää PORT-muuttujaa)
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Niilo palvelee portissa ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Niilo valmiina portissa ${PORT}`));
 
