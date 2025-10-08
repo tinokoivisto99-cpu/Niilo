@@ -4,44 +4,42 @@ const express = require("express");
 const OpenAI = require("openai");
 
 const app = express();
+app.use(express.json()); // sallii JSON-datan vastaanoton
 
-// OpenAI-asiakas
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-app.use(express.json());
+// testiviesti kun käynnistyy
+app.get("/", (req, res) => {
+  res.send("🤖 Botti on hereillä! Käytä POST /chat lähettääksesi viestin.");
+});
 
-// Testireitti, joka kysyy OpenAI:lta vastauksen
-app.get("/", async (req, res) => {
+// chat endpoint
+app.post("/chat", async (req, res) => {
+  const { message } = req.body;
+
+  if (!message) {
+    return res.status(400).json({ error: "Viesti puuttuu." });
+  }
+
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      console.error("❌ OPENAI_API_KEY puuttuu. Tarkista .env-tiedosto tai Railway Variables.");
-      return res.status(500).send("Serverin konfiguraatio-ongelma.");
-    }
-
     const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "Olet avulias avustaja." },
-        { role: "user", content: "Hei GPT! Tämä on testi Railway-palvelimelta." }
+        { role: "system", content: "Olet ystävällinen ja avulias suomenkielinen assistentti." },
+        { role: "user", content: message },
       ],
     });
 
-    const vastaus = completion.choices[0].message.content;
-    console.log("✅ Vastaus:", vastaus);
-    res.send(`GPT vastasi: ${vastaus}`);
+    const reply = completion.choices[0].message.content;
+    res.json({ reply });
   } catch (err) {
-    console.error("❌ Virhe:", err);
-    res.status(500).send("Virhe palvelussa: " + err.message);
+    console.error("Virhe:", err);
+    res.status(500).json({ error: "Virhe GPT-pyynnössä." });
   }
 });
 
-// Portti (Railway asettaa sen automaattisesti)
 const PORT = process.env.PORT || 3000;
-
-// Käynnistetään palvelin
-app.listen(PORT, () => {
-  console.log(`🚀 Serveri käynnissä portissa ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 Serveri käynnissä portissa ${PORT}`));
 
