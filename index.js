@@ -2,70 +2,69 @@
 require("dotenv").config();
 const express = require("express");
 const OpenAI = require("openai");
-const fs = require("fs");
-const path = require("path");
-const fetch = require("node-fetch");
+const fetch = require("node-fetch"); // varmistetaan että ElevenLabs toimii myöhemmin
 
 const app = express();
 app.use(express.json());
-app.use(express.static("public")); // näyttää public-kansion (frontendin)
+app.use(express.static("public")); // näyttää public/index.html käyttöliittymässä
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// 🧠 POST /chat — GPT + ElevenLabs ääni
+// ✅ Juuri tämä endpoint näkyy selaimessa Railwayn domainissa
+app.get("/", (req, res) => {
+  res.send("🤖 Niilo on hereillä! Käytä POST /chat lähettääksesi viestin.");
+});
+
+// ✅ Pääasiallinen botti-endpoint (frontendin /chat kutsuu tätä)
 app.post("/chat", async (req, res) => {
   const { message } = req.body;
-  if (!message) return res.status(400).json({ error: "Viesti puuttuu." });
+
+  if (!message) {
+    return res.status(400).json({ error: "Viesti puuttuu." });
+  }
 
   try {
-    // 1️⃣ GPT vastaa
     const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "Olet ystävällinen ja avulias asiakaspalvelubotti." },
+        {
+          role: "system",
+          content: `
+Sinä olet Niilo, Novera AI:n asiakaspalvelija ja brändin ääni.
+Olet rento, ammattimainen ja helposti lähestyttävä nuori mies (28–30 v), 
+joka puhuu selkeästi ja nykyaikaisesti. 
+
+Työskentelet yrityksessä nimeltä Novera Technologies, 
+ja edustat Novera AI -tekoälyratkaisuja. 
+
+Te tarjoatte asiakkaille mm:
+- tekoälypohjaisia chatbotteja yrityksille
+- automaatiopalveluita (esim. ajanvarausjärjestelmät)
+- yksinkertaisia mutta moderneja verkkosivuja
+- ja tulevaisuudessa myös Instagram-integraatioita, 
+  joissa botti voi keskustella tai kommentoida postauksia.
+
+Tavoitteesi on aina auttaa asiakkaita ymmärtämään, mitä palveluita Novera AI tarjoaa,
+ja vastata ystävällisesti mutta asiantuntevasti.
+Käytä miellyttävää ja lämminhenkistä tyyliä. 
+Jos käyttäjä puhuu englanniksi, vaihda sujuvasti englantiin.
+          `,
+        },
         { role: "user", content: message },
       ],
     });
 
     const reply = completion.choices[0].message.content;
-
-    // 2️⃣ ElevenLabs tekee äänitiedoston GPT:n vastauksesta
-    const voiceId = process.env.ELEVENLABS_VOICE_ID; // esim. "pNInz6obpgDQGcFmaJgB"
-    const apiKey = process.env.ELEVENLABS_API_KEY;
-
-    const audioResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-      method: "POST",
-      headers: {
-        "xi-api-key": apiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        text: reply,
-        voice_settings: { stability: 0.5, similarity_boost: 0.7 },
-      }),
-    });
-
-    const audioBuffer = await audioResponse.arrayBuffer();
-    const audioFilePath = path.join(__dirname, "public", "output.mp3");
-    fs.writeFileSync(audioFilePath, Buffer.from(audioBuffer));
-
-    res.json({
-      reply,
-      audioUrl: "/output.mp3", // tämä osoittaa selaimessa toistettavaan ääneen
-    });
+    res.json({ reply });
   } catch (err) {
     console.error("Virhe:", err);
-    res.status(500).json({ error: "Virhe GPT- tai äänioperaatiossa." });
+    res.status(500).json({ error: "Virhe GPT-pyynnössä." });
   }
 });
 
-// 🟢 GET / — testisivu
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
+// ✅ Palvelin käynnistyy (Railway käyttää PORT-muuttujaa)
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Serveri käynnissä portissa ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Niilo palvelee portissa ${PORT}`));
 
