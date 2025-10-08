@@ -1,105 +1,89 @@
-// 🎙️ Niilo Voice Assistant — Express + OpenAI + ElevenLabs
-import express from "express";
-import dotenv from "dotenv";
-import fetch from "node-fetch";
-
-dotenv.config();
+// index.js
+require("dotenv").config();
+const express = require("express");
+const OpenAI = require("openai");
+const { ElevenLabsClient } = require("elevenlabs");
 
 const app = express();
 app.use(express.json());
+app.use(express.static("public")); // ✅ näyttää public-kansion sisällön (index.html)
 
-// 🔧 Perusasetukset
-const PORT = process.env.PORT || 8080;
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const ELEVEN_API_KEY = process.env.ELEVEN_API_KEY;
-const VOICE_ID = "YOUR_VOICE_ID_HERE"; // 🔊 Lisää tähän oma voice ID ElevenLabsista
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
-// 🧠 Niilon persoonallisuus
-const personality = `
-Sinä olet Niilo, lämminhenkinen mutta fiksu tekoälyassistentti. 
-Puhut luonnollisesti suomea, osaat myös englantia. 
-Olet empaattinen, humoristinen ja joskus vähän sarkastinen, mutta aina ystävällinen.
-Jos joku tervehtii, vastaa kuin ystävä. Jos joku kysyy apua, auta aidosti ja selkeästi.
-`;
+const elevenlabs = new ElevenLabsClient({
+  apiKey: process.env.ELEVEN_API_KEY, // varmista että tämä nimi on sama kuin .env-tiedostossa
+});
 
-// 🧩 OpenAI Chat Endpoint
+const VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; // tähän voit laittaa oman voice ID:n
+
+// ✅ testataan että serveri on käynnissä
+app.get("/", (req, res) => {
+  res.send("🤖 Niilo on hereillä! Käytä /chat lähettääksesi viestin.");
+});
+
+// ✅ pääasiallinen keskustelu-endpoint
 app.post("/chat", async (req, res) => {
+  const { message } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: "Viesti puuttuu." });
+  }
+
   try {
-    const userMessage = req.body.message;
+    // 🧠 Niilon persoonallisuus
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `
+Olet Niilo, Novera AI:n asiakaspalvelija ja brändin ääni.
+Olet rento, ammattimainen ja helposti lähestyttävä nuori mies (28–30v),
+joka puhuu nykyaikaisesti ja ystävällisesti.
 
-    if (!userMessage) {
-      return res.status(400).json({ error: "Viesti puuttuu." });
-    }
+Työskentelet yrityksessä nimeltä Novyra Technologies,
+ja edustat Novyra AI -tekoälyratkaisuja.
 
-    // 🧠 Luo vastaus OpenAI:n avulla
-    const chatResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: personality },
-          { role: "user", content: userMessage },
-        ],
-      }),
+Tarjoatte mm:
+- tekoälypohjaisia chatbotteja yrityksille
+- automaatioita (esim. ajanvarausjärjestelmät)
+- moderneja verkkosivuja
+- tulevaisuudessa myös someintegraatioita (esim. Instagram-kommentointi).
+
+Tavoitteesi on aina auttaa asiakkaita ymmärtämään, mitä palveluita tarjoatte
+ja vastata lämpimästi mutta asiantuntevasti.
+Jos käyttäjä puhuu englanniksi, vaihda sujuvasti englantiin.
+          `,
+        },
+        { role: "user", content: message },
+      ],
     });
 
-    const data = await chatResponse.json();
-    const aiText = data.choices?.[0]?.message?.content?.trim();
+    const text = completion.choices[0].message.content;
 
-    if (!aiText) {
-      throw new Error("OpenAI ei palauttanut vastausta.");
-    }
-
-    console.log("🧠 Niilo:", aiText);
-
-    // 🎧 Luo ääni ElevenLabsista
-    const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
-      method: "POST",
-      headers: {
-        "Accept": "audio/mpeg",
-        "Content-Type": "application/json",
-        "xi-api-key": ELEVEN_API_KEY,
-      },
-      body: JSON.stringify({
-        text: aiText,
-        voice_settings: {
-          stability: 0.4,
-          similarity_boost: 0.85
-        }
-      }),
+    // 🎙️ Luodaan ääni ElevenLabsilla
+    const audio = await elevenlabs.textToSpeech.convert(VOICE_ID, {
+      model_id: "eleven_multilingual_v2",
+      text,
     });
 
-    if (!ttsResponse.ok) {
-      const errText = await ttsResponse.text();
-      console.error("❌ ElevenLabs error:", errText);
-      return res.status(500).json({ error: "Virhe ElevenLabs-kutsussa." });
+    // muunnetaan ääni base64-muotoon
+    const chunks = [];
+    for await (const chunk of audio) {
+      chunks.push(chunk);
     }
+    const audioBuffer = Buffer.concat(chunks);
+    const audioBase64 = audioBuffer.toString("base64");
 
-    const audioBuffer = await ttsResponse.arrayBuffer();
-
-    // 🎙️ Palauta tekstivastaus ja ääni base64:nä
-    res.json({
-      text: aiText,
-      audio: Buffer.from(audioBuffer).toString("base64"),
-    });
-
-  } catch (error) {
-    console.error("Virhe:", error);
-    res.status(500).json({ error: "Jotain meni pieleen palvelussa." });
+    res.json({ text, audio: audioBase64 });
+  } catch (err) {
+    console.error("Virhe:", err);
+    res.status(500).json({ error: "Jokin meni pieleen palvelussa." });
   }
 });
 
-// 🏠 Testausta varten yksinkertainen reitti
-app.get("/", (req, res) => {
-  res.send("Niilo 🤖 on hereillä ja valmiina juttelemaan!");
-});
-
-// 🚀 Käynnistä palvelin
-app.listen(PORT, () => {
-  console.log(`✅ Niilo kuuntelee portissa ${PORT}`);
-});
+// ✅ käynnistys
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 Niilo käynnissä portissa ${PORT}`));
 
