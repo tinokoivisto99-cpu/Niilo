@@ -1,62 +1,37 @@
 <!DOCTYPE html>
 <html lang="fi">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Niilo - Novyra AI</title>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        background-color: #0b0c10;
-        color: #c5c6c7;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100vh;
-        margin: 0;
-      }
-      #chat-box {
-        width: 90%;
-        max-width: 600px;
-        background: #1f2833;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 0 10px #45a29e;
-      }
-      textarea {
-        width: 100%;
-        height: 80px;
-        border-radius: 8px;
-        border: none;
-        padding: 10px;
-        margin-bottom: 10px;
-      }
-      button {
-        background: #45a29e;
-        border: none;
-        color: white;
-        padding: 10px 20px;
-        border-radius: 8px;
-        cursor: pointer;
-      }
-      #reply {
-        margin-top: 15px;
-        background: #0b0c10;
-        padding: 10px;
-        border-radius: 8px;
-        white-space: pre-wrap;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="chat-box">
-      <h2>🤖 Niilo – Novyra AI:n asiakaspalvelija</h2>
-      <textarea id="message" placeholder="Kirjoita viestisi Niilolle..."></textarea>
-      <button onclick="sendMessage()">Lähetä</button>
-      <div id="reply"></div>
-      <audio id="audio" controls style="margin-top: 15px; width: 100%;"></audio>
-    </div>
-    <script src="script.js"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Niilo 🤖</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" />
+</head>
+<body class="bg-gray-900 text-white flex flex-col h-screen">
+
+  <header class="bg-gray-800 p-4 shadow-md text-center text-xl font-semibold">
+    Niilo – sun rento AI-kaveri
+  </header>
+
+  <main id="chat" class="flex-1 overflow-y-auto p-4 space-y-4">
+    <div class="text-gray-400 text-center text-sm">🟢 Niilo on linjoilla</div>
+  </main>
+
+  <footer class="bg-gray-800 p-4 flex gap-2">
+    <input 
+      id="userInput" 
+      type="text" 
+      placeholder="Kirjoita viesti Niilolle..." 
+      class="flex-1 p-2 rounded bg-gray-700 focus:outline-none"
+    />
+    <button 
+      id="sendBtn" 
+      class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded font-semibold"
+    >
+      Lähetä
+    </button>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
 </html>
 

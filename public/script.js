@@ -1,33 +1,58 @@
-async function sendMessage() {
-  const message = document.getElementById("message").value;
-  const replyBox = document.getElementById("reply");
-  const audioEl = document.getElementById("audio");
+const chat = document.getElementById("chat");
+const userInput = document.getElementById("userInput");
+const sendBtn = document.getElementById("sendBtn");
 
-  replyBox.textContent = "Niilo miettii hetken... 🤔";
+sendBtn.addEventListener("click", sendMessage);
+userInput.addEventListener("keypress", (e) => {
+  if (e.key === "Enter") sendMessage();
+});
+
+async function sendMessage() {
+  const text = userInput.value.trim();
+  if (!text) return;
+
+  addMessage("user", text);
+  userInput.value = "";
 
   try {
-    const res = await fetch("/chat", {
+    const response = await fetch("/chat-endpoint", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message: text }),
     });
 
-    const data = await res.json();
+    if (!response.ok) throw new Error("Virhe palvelimessa");
+    const data = await response.json();
 
-    if (data.reply) {
-      replyBox.textContent = "Niilo: " + data.reply;
+    addMessage("niilo", data.reply);
 
-      if (data.audio) {
-        const audioSrc = "data:audio/mpeg;base64," + data.audio;
-        audioEl.src = audioSrc;
-        audioEl.play();
-      }
-    } else {
-      replyBox.textContent = "Niilo ei vastannut 🤷‍♂️";
+    if (data.audioUrl) {
+      const audio = new Audio(data.audioUrl);
+      audio.play().catch(err => console.error("Äänen toisto epäonnistui:", err));
     }
+
   } catch (err) {
     console.error(err);
-    replyBox.textContent = "Virhe yhteydessä palvelimeen.";
+    addMessage("error", "😬 Jotain meni pieleen. Yritä uudelleen.");
   }
+}
+
+function addMessage(sender, text) {
+  const msg = document.createElement("div");
+  msg.classList.add("p-3", "rounded-lg", "max-w-lg");
+
+  if (sender === "user") {
+    msg.classList.add("bg-green-700", "self-end", "ml-auto");
+    msg.textContent = `🧑 ${text}`;
+  } else if (sender === "niilo") {
+    msg.classList.add("bg-gray-700", "self-start");
+    msg.textContent = `🤖 ${text}`;
+  } else {
+    msg.classList.add("bg-red-700");
+    msg.textContent = text;
+  }
+
+  chat.appendChild(msg);
+  chat.scrollTop = chat.scrollHeight;
 }
 
