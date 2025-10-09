@@ -1,33 +1,32 @@
 import express from "express";
 import fetch from "node-fetch";
 import dotenv from "dotenv";
+import cors from "cors";
+
 dotenv.config();
 
 const app = express();
-app.use(express.json());
+const PORT = process.env.PORT || 8080;
 
-// ✅ Ympäristömuuttujat
+app.use(express.json());
+app.use(cors());
+
+// --- Ympäristömuuttujat ---
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ELEVEN_API_KEY = process.env.ELEVEN_API_KEY;
-const VOICE_ID = process.env.VOICE_ID;
-const PORT = process.env.PORT || 3000;
+const VOICE_ID = process.env.VOICE_ID || "RUftzcd9LaeeRXS2m8"; // oma oletusääni
 
-// ✅ Persoonallisuus (voit säätää tätä)
-const NIILO_PROMPT = `
-Olet Niilo, hauska ja empaattinen tekoälyavustaja, joka juttelee suomeksi.
-Pidät huumorista, mutta olet myös ystävällinen ja auttavainen.
-Keskustelut ovat rentoja, mutta et koskaan loukkaa ketään.
-Vastauksesi ovat lyhyitä, lämpimiä ja joskus leikillisiä. 😊
-`;
-
-// ✅ Pää-endpoint (GPT + ElevenLabs)
+// --- POST /chat ---
 app.post("/chat", async (req, res) => {
   try {
-    const { message } = req.body;
-    console.log("💬 Käyttäjän viesti:", message);
+    const userMessage = req.body.message;
 
-    // --- OpenAI Chat ---
-    const completion = await fetch("https://api.openai.com/v1/chat/completions", {
+    if (!userMessage) {
+      return res.status(400).json({ error: "Viesti puuttuu!" });
+    }
+
+    // --- OpenAI-vastaus ---
+    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -36,39 +35,39 @@ app.post("/chat", async (req, res) => {
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: NIILO_PROMPT },
-          { role: "user", content: message },
+          {
+            role: "system",
+            content:
+              "Olet Niilo, sympaattinen ja hauska suomenkielinen avustaja. Vastaa lyhyesti ja puhekielellä, mutta ystävällisesti.",
+          },
+          { role: "user", content: userMessage },
         ],
       }),
     });
 
-    const data = await completion.json();
-    const reply = data.choices?.[0]?.message?.content || "En osaa vastata nyt 😅";
-    console.log("🤖 Niilo vastasi:", reply);
+    const data = await openaiResponse.json();
+    const reply = data.choices?.[0]?.message?.content || "Hmm, enpä osaa sanoa.";
 
     // --- ElevenLabs TTS ---
-    const ttsResponse = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`,
-      {
-        method: "POST",
-        headers: {
-          "xi-api-key": ELEVEN_API_KEY,
-          "Content-Type": "application/json",
+    const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": ELEVEN_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text: reply,
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75,
         },
-        body: JSON.stringify({
-          text: reply,
-          voice_settings: { stability: 0.5, similarity_boost: 0.7 },
-        }),
-      }
-    );
+      }),
+    });
 
     if (!ttsResponse.ok) {
-      const err = await ttsResponse.text();
-      console.error("❌ TTS error:", err);
-      return res.status(500).json({ error: "TTS epäonnistui", detail: err });
+      throw new Error("Virhe ElevenLabsin puolella");
     }
 
-    // Palauta sekä teksti että ääni (base64)
     const audioBuffer = await ttsResponse.arrayBuffer();
     const audioBase64 = Buffer.from(audioBuffer).toString("base64");
 
@@ -79,12 +78,17 @@ app.post("/chat", async (req, res) => {
   }
 });
 
-// ✅ Health check
+// --- Health check ---
 app.get("/", (req, res) => {
   res.send("🚀 Niilo on käynnissä ja valmis jutteluun!");
 });
 
-// ✅ Käynnistys
+// --- Keep alive (estää Railwayn sammutuksen) ---
+setInterval(() => {
+  console.log("🫡 Niilo on yhä hereillä...");
+}, 30000);
+
+// --- Käynnistys ---
 app.listen(PORT, () => {
   console.log(`🚀 Niilo käynnissä portissa ${PORT}`);
 });
