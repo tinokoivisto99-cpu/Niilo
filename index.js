@@ -1,83 +1,90 @@
-// index.js
 import express from "express";
+import fetch from "node-fetch";
 import dotenv from "dotenv";
-import { writeFile } from "fs/promises";
-import { join } from "path";
-import OpenAI from "openai";
-import { ElevenLabsClient } from "elevenlabs";
-
 dotenv.config();
 
 const app = express();
 app.use(express.json());
 
-const PORT = process.env.PORT || 3000;
+// ✅ Ympäristömuuttujat
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ELEVEN_API_KEY = process.env.ELEVEN_API_KEY;
-const VOICE_ID = process.env.VOICE_ID; //RUftzcd9LaeeRXS2m85P
+const VOICE_ID = process.env.VOICE_ID;
+const PORT = process.env.PORT || 3000;
 
-// 🧠 Tarkistetaan, että kaikki avaimet on olemassa
-if (!OPENAI_API_KEY) console.error("❌ OPENAI_API_KEY puuttuu .env:stä!");
-if (!ELEVEN_API_KEY) console.error("❌ ELEVEN_API_KEY puuttuu .env:stä!");
-if (!VOICE_ID) console.error("❌ VOICE_ID puuttuu .env:stä!");
-
-const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
-const elevenlabs = new ElevenLabsClient({ apiKey: ELEVEN_API_KEY });
-
-// --- Persoonallisuus (Niilo) ---
-const personality = `
-Olet Niilo, hauska ja rento tekoäly, joka puhuu suomea luonnollisesti.
-Vastauksesi ovat empaattisia, ystävällisiä ja välillä vähän hassuja.
-Et käytä liian virallista kieltä, ja käytät joskus hymiöitä kuten 😄, 🤔 tai 🙃.
-Jos käyttäjä on iloinen, ole iloinen takaisin. Jos hän on surullinen, yritä piristää.
-Älä koskaan kirjoita pitkiä esseitä – vaan puhu kuin kaverille.
+// ✅ Persoonallisuus (voit säätää tätä)
+const NIILO_PROMPT = `
+Olet Niilo, hauska ja empaattinen tekoälyavustaja, joka juttelee suomeksi.
+Pidät huumorista, mutta olet myös ystävällinen ja auttavainen.
+Keskustelut ovat rentoja, mutta et koskaan loukkaa ketään.
+Vastauksesi ovat lyhyitä, lämpimiä ja joskus leikillisiä. 😊
 `;
 
-// --- Chat endpoint ---
-app.post("/chat-endpoint", async (req, res) => {
+// ✅ Pää-endpoint (GPT + ElevenLabs)
+app.post("/chat", async (req, res) => {
   try {
-    const userMessage = req.body.message;
+    const { message } = req.body;
+    console.log("💬 Käyttäjän viesti:", message);
 
-    if (!userMessage) {
-      return res.status(400).json({ error: "Viesti puuttuu!" });
-    }
-
-    console.log("💬 Käyttäjä sanoi:", userMessage);
-
-    // 🔹 GPT-vastaus
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: personality },
-        { role: "user", content: userMessage },
-      ],
+    // --- OpenAI Chat ---
+    const completion = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: NIILO_PROMPT },
+          { role: "user", content: message },
+        ],
+      }),
     });
 
-    const reply = completion.choices[0].message.content;
+    const data = await completion.json();
+    const reply = data.choices?.[0]?.message?.content || "En osaa vastata nyt 😅";
     console.log("🤖 Niilo vastasi:", reply);
 
-    // 🔹 ElevenLabs TTS
-    const audioResponse = await elevenlabs.textToSpeech.convert(VOICE_ID, {
-      text: reply,
-      voice_settings: { stability: 0.5, similarity_boost: 0.8 },
-      model_id: "eleven_turbo_v2",
-    });
+    // --- ElevenLabs TTS ---
+    const ttsResponse = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": ELEVEN_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: reply,
+          voice_settings: { stability: 0.5, similarity_boost: 0.7 },
+        }),
+      }
+    );
 
-    // Tallennetaan ääni public/ -kansioon
-    const filePath = join("public", "response.mp3");
-    await writeFile(filePath, Buffer.from(await audioResponse.arrayBuffer()));
+    if (!ttsResponse.ok) {
+      const err = await ttsResponse.text();
+      console.error("❌ TTS error:", err);
+      return res.status(500).json({ error: "TTS epäonnistui", detail: err });
+    }
 
-    res.json({
-      text: reply,
-      audioUrl: "/response.mp3",
-    });
-  } catch (error) {
-    console.error("❌ Virhe /chat-endpointissa:", error);
-    res.status(500).json({ error: "Jotain meni pieleen palvelimella." });
+    // Palauta sekä teksti että ääni (base64)
+    const audioBuffer = await ttsResponse.arrayBuffer();
+    const audioBase64 = Buffer.from(audioBuffer).toString("base64");
+
+    res.json({ text: reply, audio: audioBase64 });
+  } catch (err) {
+    console.error("Virhe /chat-endpointissa:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
-// --- Palvelin käyntiin ---
+// ✅ Health check
+app.get("/", (req, res) => {
+  res.send("🚀 Niilo on käynnissä ja valmis jutteluun!");
+});
+
+// ✅ Käynnistys
 app.listen(PORT, () => {
   console.log(`🚀 Niilo käynnissä portissa ${PORT}`);
 });
