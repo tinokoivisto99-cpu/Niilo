@@ -7,10 +7,11 @@ import { fileURLToPath } from "url";
 
 dotenv.config();
 
+// --- Perusasetukset ---
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// --- Apumuuttujat tiedostopolkuja varten ---
+// --- Polkujen määritykset ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -18,13 +19,13 @@ const __dirname = path.dirname(__filename);
 app.use(express.json());
 app.use(cors());
 
-// Palvellaan staattinen frontti (public-kansio)
+// --- Staattinen frontti (public-kansio) ---
 app.use(express.static(path.join(__dirname, "public")));
 
 // --- API-avaimet ---
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ELEVEN_API_KEY = process.env.ELEVEN_API_KEY;
-const VOICE_ID = process.env.VOICE_ID || "RUftzcd9LaeeRXS2m8"; // oletusääni
+const VOICE_ID = process.env.VOICE_ID || "RUftzcd9LaeeRXS2m8";
 
 // --- POST /chat ---
 app.post("/chat", async (req, res) => {
@@ -58,7 +59,7 @@ app.post("/chat", async (req, res) => {
     const data = await openaiResponse.json();
     const reply = data.choices?.[0]?.message?.content || "Hmm, enpä osaa sanoa.";
 
-    // --- ElevenLabs TTS ---
+    // --- ElevenLabs-äänivastaus ---
     const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
       method: "POST",
       headers: {
@@ -83,7 +84,7 @@ app.post("/chat", async (req, res) => {
 
     res.json({ text: reply, audio: audioBase64 });
   } catch (err) {
-    console.error("Virhe /chat-endpointissa:", err);
+    console.error("❌ Virhe /chat-endpointissa:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -93,7 +94,7 @@ app.get("/health", (req, res) => {
   res.send("✅ Niilo toimii moitteetta!");
 });
 
-// --- Pääsivu (index.html) ---
+// --- Etusivu (index.html) ---
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
@@ -103,8 +104,14 @@ setInterval(() => {
   console.log("🫡 Niilo on yhä hereillä...");
 }, 30000);
 
+// --- SIGTERM käsittely (Railwayn siisti sammutus) ---
+process.on("SIGTERM", () => {
+  console.log("🛑 Railway lähettää SIGTERM – sammutetaan Niilo siististi...");
+  process.exit(0);
+});
+
 // --- Käynnistys ---
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Niilo käynnissä portissa ${PORT}`);
 });
 
