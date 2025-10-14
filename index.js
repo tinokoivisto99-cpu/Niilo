@@ -2,19 +2,29 @@ import express from "express";
 import fetch from "node-fetch";
 import dotenv from "dotenv";
 import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+// --- Apumuuttujat tiedostopolkuja varten ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// --- Middleware ---
 app.use(express.json());
 app.use(cors());
 
-// --- Ympäristömuuttujat ---
+// Palvellaan staattinen frontti (public-kansio)
+app.use(express.static(path.join(__dirname, "public")));
+
+// --- API-avaimet ---
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ELEVEN_API_KEY = process.env.ELEVEN_API_KEY;
-const VOICE_ID = process.env.VOICE_ID || "RUftzcd9LaeeRXS2m8"; // oma oletusääni
+const VOICE_ID = process.env.VOICE_ID || "RUftzcd9LaeeRXS2m8"; // oletusääni
 
 // --- POST /chat ---
 app.post("/chat", async (req, res) => {
@@ -79,11 +89,16 @@ app.post("/chat", async (req, res) => {
 });
 
 // --- Health check ---
-app.get("/", (req, res) => {
-  res.send("🚀 Niilo on käynnissä ja valmis jutteluun!");
+app.get("/health", (req, res) => {
+  res.send("✅ Niilo toimii moitteetta!");
 });
 
-// --- Keep alive (estää Railwayn sammutuksen) ---
+// --- Pääsivu (index.html) ---
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// --- Keep alive (estää Railwayn idlen) ---
 setInterval(() => {
   console.log("🫡 Niilo on yhä hereillä...");
 }, 30000);
