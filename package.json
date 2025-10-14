@@ -1,15 +1,15 @@
 {
-  "name": "uusi-botti",
+  "name": "niilo-botti",
   "version": "1.0.0",
+  "description": "Niilo on sympaattinen ja hauska suomenkielinen avustaja, joka toimii OpenAI:n ja ElevenLabsin avulla.",
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "node-fetch": "^3.3.2"
-  }
-}
+    "express": "
 
