@@ -5,12 +5,15 @@ const statusBanner = document.getElementById("statusBanner");
 
 let chatEnabled = true;
 let voiceEnabled = true;
+let chatNoticeShown = false;
+let voiceNoticeShown = false;
 
 sendBtn.addEventListener("click", sendMessage);
 userInput.addEventListener("keypress", (e) => {
   if (e.key === "Enter") sendMessage();
 });
 
+refreshStatusBanner();
 checkHealth();
 
 async function sendMessage() {
@@ -44,6 +47,15 @@ async function sendMessage() {
       } catch (error) {
         // Ei JSON-runkoa
       }
+
+      if (response.status === 503) {
+        setChatState(false, {
+          reason: "Niilo ei ole käytettävissä, koska OpenAI-palvelu ei vastaa.",
+        });
+        const err = new Error(errorMessage);
+        err.serviceUnavailable = true;
+        throw err;
+      }
       throw new Error(errorMessage);
     }
 
@@ -58,6 +70,9 @@ async function sendMessage() {
 
   } catch (err) {
     console.error(err);
+    if (err?.serviceUnavailable) {
+      return;
+    }
     const message = err instanceof Error ? err.message : null;
     addMessage("error", message || "😬 Jotain meni pieleen. Yritä uudelleen.");
   } finally {
@@ -78,9 +93,12 @@ async function playVoice(text) {
     if (!response.ok) {
       if (response.status === 503) {
         console.info("ElevenLabs ei ole käytössä:", await response.text());
-      } else {
-        console.warn("TTS ei käytettävissä");
+        setVoiceState(false, {
+          reason: "ℹ️  Äänivastaus ei ole käytössä.",
+        });
+        return;
       }
+      console.warn("TTS ei käytettävissä");
       return;
     }
 
@@ -143,23 +161,24 @@ async function checkHealth() {
     if (!response.ok) throw new Error("Palvelin ei vastaa");
 
     const data = await response.json();
-    chatEnabled = data.chatEnabled !== false;
-    voiceEnabled = data.voiceEnabled === undefined ? true : Boolean(data.voiceEnabled);
+    const chatIsEnabled = data.chatEnabled !== false;
+    const voiceIsEnabled =
+      data.voiceEnabled === undefined ? true : Boolean(data.voiceEnabled);
 
-    if (!chatEnabled) {
-      updateStatus("🔴 Niilo on tauolla (chat ei käytettävissä)", "error");
-      addMessage("error", "Niilo ei ole käytettävissä, koska OPENAI_API_KEY puuttuu.");
-    } else if (!voiceEnabled) {
-      updateStatus("🟡 Niilo on linjoilla (ilman ääntä)", "warn");
-      addMessage("info", "ℹ️  Äänivastaus ei ole käytössä.");
-    } else {
-      updateStatus("🟢 Niilo on linjoilla", "ok");
-    }
+    setChatState(chatIsEnabled, {
+      notify: !chatIsEnabled,
+      reason: "Niilo ei ole käytettävissä, koska OPENAI_API_KEY puuttuu.",
+    });
+    setVoiceState(voiceIsEnabled, {
+      notify: !voiceIsEnabled,
+      reason: "ℹ️  Äänivastaus ei ole käytössä.",
+    });
   } catch (error) {
-    chatEnabled = false;
-    voiceEnabled = false;
-    updateStatus("🔴 Niiloon ei saada yhteyttä", "error");
-    addMessage("error", "Palvelimeen ei saatu yhteyttä. Yritä myöhemmin uudelleen.");
+    console.error("Terveystarkastus epäonnistui:", error);
+    setChatState(false, {
+      reason: "Palvelimeen ei saatu yhteyttä. Yritä myöhemmin uudelleen.",
+    });
+    setVoiceState(false, { notify: false });
   } finally {
     setLoading(false);
   }
@@ -182,5 +201,44 @@ function updateStatus(text, tone = "neutral") {
 
   const selectedClass = toneClassMap[tone] ?? toneClassMap.neutral;
   statusBanner.classList.add(selectedClass);
+}
+
+function refreshStatusBanner() {
+  if (!chatEnabled) {
+    updateStatus("🔴 Niilo on tauolla (chat ei käytettävissä)", "error");
+  } else if (!voiceEnabled) {
+    updateStatus("🟡 Niilo on linjoilla (ilman ääntä)", "warn");
+  } else {
+    updateStatus("🟢 Niilo on linjoilla", "ok");
+  }
+}
+
+function setChatState(enabled, { reason, notify = true } = {}) {
+  const previousState = chatEnabled;
+  chatEnabled = enabled;
+
+  if (enabled) {
+    chatNoticeShown = false;
+  } else if (notify && reason && (!chatNoticeShown || previousState)) {
+    addMessage("error", reason);
+    chatNoticeShown = true;
+  }
+
+  refreshStatusBanner();
+  setLoading(false);
+}
+
+function setVoiceState(enabled, { reason, notify = true } = {}) {
+  const previousState = voiceEnabled;
+  voiceEnabled = enabled;
+
+  if (enabled) {
+    voiceNoticeShown = false;
+  } else if (notify && reason && (!voiceNoticeShown || previousState)) {
+    addMessage("info", reason);
+    voiceNoticeShown = true;
+  }
+
+  refreshStatusBanner();
 }
 
