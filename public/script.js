@@ -1,13 +1,24 @@
 const chat = document.getElementById("chat");
 const userInput = document.getElementById("userInput");
 const sendBtn = document.getElementById("sendBtn");
+const statusBanner = document.getElementById("statusBanner");
+
+let chatEnabled = true;
+let voiceEnabled = true;
 
 sendBtn.addEventListener("click", sendMessage);
 userInput.addEventListener("keypress", (e) => {
   if (e.key === "Enter") sendMessage();
 });
 
+checkHealth();
+
 async function sendMessage() {
+  if (!chatEnabled) {
+    addMessage("error", "Niilo ei voi vastata juuri nyt. Yritä hetken päästä uudelleen.");
+    return;
+  }
+
   if (sendBtn.disabled) return;
   const text = userInput.value.trim();
   if (!text) return;
@@ -55,6 +66,8 @@ async function sendMessage() {
 }
 
 async function playVoice(text) {
+  if (!voiceEnabled) return;
+
   try {
     const response = await fetch("/api/voice", {
       method: "POST",
@@ -89,8 +102,17 @@ async function playVoice(text) {
 }
 
 function setLoading(isLoading) {
-  sendBtn.disabled = isLoading;
-  sendBtn.textContent = isLoading ? "Lähetetään..." : "Lähetä";
+  const unavailable = !chatEnabled;
+  sendBtn.disabled = isLoading || unavailable;
+  userInput.disabled = isLoading || unavailable;
+
+  if (unavailable) {
+    sendBtn.textContent = "Ei käytettävissä";
+    userInput.placeholder = "Niilo ei ole juuri nyt käytettävissä";
+  } else {
+    sendBtn.textContent = isLoading ? "Lähetetään..." : "Lähetä";
+    userInput.placeholder = "Kirjoita viesti Niilolle...";
+  }
 }
 
 function addMessage(sender, text) {
@@ -103,6 +125,9 @@ function addMessage(sender, text) {
   } else if (sender === "niilo") {
     msg.classList.add("bg-gray-700", "self-start");
     msg.textContent = `🤖 ${text}`;
+  } else if (sender === "info") {
+    msg.classList.add("bg-blue-700", "self-center", "text-sm", "text-center");
+    msg.textContent = text;
   } else {
     msg.classList.add("bg-red-700");
     msg.textContent = text;
@@ -110,5 +135,52 @@ function addMessage(sender, text) {
 
   chat.appendChild(msg);
   chat.scrollTop = chat.scrollHeight;
+}
+
+async function checkHealth() {
+  try {
+    const response = await fetch("/health");
+    if (!response.ok) throw new Error("Palvelin ei vastaa");
+
+    const data = await response.json();
+    chatEnabled = data.chatEnabled !== false;
+    voiceEnabled = data.voiceEnabled === undefined ? true : Boolean(data.voiceEnabled);
+
+    if (!chatEnabled) {
+      updateStatus("🔴 Niilo on tauolla (chat ei käytettävissä)", "error");
+      addMessage("error", "Niilo ei ole käytettävissä, koska OPENAI_API_KEY puuttuu.");
+    } else if (!voiceEnabled) {
+      updateStatus("🟡 Niilo on linjoilla (ilman ääntä)", "warn");
+      addMessage("info", "ℹ️  Äänivastaus ei ole käytössä.");
+    } else {
+      updateStatus("🟢 Niilo on linjoilla", "ok");
+    }
+  } catch (error) {
+    chatEnabled = false;
+    voiceEnabled = false;
+    updateStatus("🔴 Niiloon ei saada yhteyttä", "error");
+    addMessage("error", "Palvelimeen ei saatu yhteyttä. Yritä myöhemmin uudelleen.");
+  } finally {
+    setLoading(false);
+  }
+}
+
+function updateStatus(text, tone = "neutral") {
+  if (!statusBanner) return;
+
+  statusBanner.textContent = text;
+
+  const toneClassMap = {
+    ok: "text-green-400",
+    warn: "text-yellow-400",
+    error: "text-red-400",
+    neutral: "text-gray-400",
+  };
+
+  const toneClasses = Object.values(toneClassMap);
+  statusBanner.classList.remove(...toneClasses);
+
+  const selectedClass = toneClassMap[tone] ?? toneClassMap.neutral;
+  statusBanner.classList.add(selectedClass);
 }
 

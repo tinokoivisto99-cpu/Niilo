@@ -17,20 +17,26 @@ const PORT = process.env.PORT || 3000;
 
 // --- OPENAI API ---
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-if (!OPENAI_API_KEY) {
+const CHAT_ENABLED = Boolean(OPENAI_API_KEY);
+if (!CHAT_ENABLED) {
   console.warn("⚠️  OPENAI_API_KEY puuttuu. Chat-endpoint palauttaa virheen kunnes avain on asetettu.");
 }
 
 // --- ELEVENLABS API ---
 const ELEVEN_API_KEY = process.env.ELEVEN_API_KEY;
 const VOICE_ID = process.env.VOICE_ID;
-if (!ELEVEN_API_KEY || !VOICE_ID) {
+const VOICE_ENABLED = Boolean(ELEVEN_API_KEY && VOICE_ID);
+if (!VOICE_ENABLED) {
   console.warn("ℹ️  ElevenLabs-ääni ei ole käytössä (ELEVEN_API_KEY tai VOICE_ID puuttuu).");
 }
 
 // ✅ Perusreitti testaukseen
 app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
+  res.json({
+    status: "ok",
+    chatEnabled: CHAT_ENABLED,
+    voiceEnabled: VOICE_ENABLED,
+  });
 });
 
 // ✅ Chat endpoint (GPT)
@@ -42,7 +48,7 @@ app.post("/api/chat", async (req, res) => {
       return res.status(400).json({ error: "Message puuttuu!" });
     }
 
-    if (!OPENAI_API_KEY) {
+    if (!CHAT_ENABLED) {
       return res.status(503).json({ error: "OPENAI_API_KEY puuttuu palvelimelta." });
     }
 
@@ -88,7 +94,7 @@ app.post("/api/voice", async (req, res) => {
       return res.status(400).json({ error: "Teksti puuttuu!" });
     }
 
-    if (!ELEVEN_API_KEY || !VOICE_ID) {
+    if (!VOICE_ENABLED) {
       return res.status(503).json({ error: "ElevenLabs ei ole konfiguroitu." });
     }
 
