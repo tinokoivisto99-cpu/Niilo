@@ -8,33 +8,89 @@ userInput.addEventListener("keypress", (e) => {
 });
 
 async function sendMessage() {
+  if (sendBtn.disabled) return;
   const text = userInput.value.trim();
   if (!text) return;
 
   addMessage("user", text);
   userInput.value = "";
+  setLoading(true);
 
   try {
-    const response = await fetch("/chat-endpoint", {
+    const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: text }),
     });
 
-    if (!response.ok) throw new Error("Virhe palvelimessa");
-    const data = await response.json();
-
-    addMessage("niilo", data.reply);
-
-    if (data.audioUrl) {
-      const audio = new Audio(data.audioUrl);
-      audio.play().catch(err => console.error("Äänen toisto epäonnistui:", err));
+    if (!response.ok) {
+      let errorMessage = "Virhe palvelimessa";
+      try {
+        const payload = await response.json();
+        if (payload?.error) {
+          errorMessage = payload.error;
+        }
+      } catch (error) {
+        // Ei JSON-runkoa
+      }
+      throw new Error(errorMessage);
     }
+
+    const data = await response.json();
+    const reply = data.reply?.trim();
+
+    if (!reply) throw new Error("Tyhjä vastaus");
+
+    addMessage("niilo", reply);
+
+    playVoice(reply);
 
   } catch (err) {
     console.error(err);
-    addMessage("error", "😬 Jotain meni pieleen. Yritä uudelleen.");
+    const message = err instanceof Error ? err.message : null;
+    addMessage("error", message || "😬 Jotain meni pieleen. Yritä uudelleen.");
+  } finally {
+    setLoading(false);
   }
+}
+
+async function playVoice(text) {
+  try {
+    const response = await fetch("/api/voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 503) {
+        console.info("ElevenLabs ei ole käytössä:", await response.text());
+      } else {
+        console.warn("TTS ei käytettävissä");
+      }
+      return;
+    }
+
+    const audioBlob = await response.blob();
+    const audioUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio(audioUrl);
+    const cleanup = () => URL.revokeObjectURL(audioUrl);
+    audio.addEventListener("ended", cleanup, { once: true });
+
+    try {
+      await audio.play();
+    } catch (error) {
+      cleanup();
+      throw error;
+    }
+  } catch (error) {
+    console.error("Äänen toisto epäonnistui:", error);
+  }
+}
+
+function setLoading(isLoading) {
+  sendBtn.disabled = isLoading;
+  sendBtn.textContent = isLoading ? "Lähetetään..." : "Lähetä";
 }
 
 function addMessage(sender, text) {
