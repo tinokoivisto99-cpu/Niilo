@@ -136,6 +136,44 @@ app.post("/api/voice", async (req, res) => {
     res.status(500).json({ error: "Palvelinvirhe äänessä" });
   }
 });
+// ✅ Lokien tallennus Novyra CRM:ään
+app.post("/api/log", async (req, res) => {
+  try {
+    const { type, message, user, meta } = req.body;
+
+    if (!type || !message) {
+      return res.status(400).json({ error: "type ja message vaaditaan." });
+    }
+
+    const crmUrl = process.env.CRM_API_URL || "https://novyracrm.com/api/logs";
+
+    const response = await fetch(crmUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.CRM_API_KEY || ""}`
+      },
+      body: JSON.stringify({
+        type,
+        message,
+        user,
+        meta,
+        timestamp: new Date().toISOString()
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error("CRM log error:", err);
+      return res.status(500).json({ error: "Lokitietojen lähetys epäonnistui CRM:ään." });
+    }
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error("CRM log error:", e);
+    res.status(500).json({ error: "Palvelinvirhe lokien tallennuksessa." });
+  }
+});
 
 // --- SERVER ---
 app.listen(PORT, () => {
