@@ -72,6 +72,14 @@ app.post("/api/chat", async (req, res) => {
 
     if (!response.ok) {
       console.error("GPT API virhe:", data);
+
+      // ✅ Lisätty: tarkempi virheenkäsittely
+      if (data?.error?.code === "insufficient_quota") {
+        return res.status(503).json({
+          error: "Palvelussa on hetkellinen ruuhka. Yritä uudelleen myöhemmin."
+        });
+      }
+
       const status = response.status === 401 ? 502 : 500;
       return res.status(status).json({ error: "GPT-pyyntö epäonnistui" });
     }
@@ -81,9 +89,12 @@ app.post("/api/chat", async (req, res) => {
 
   } catch (error) {
     console.error("Chat endpoint error:", error);
-    res.status(500).json({ error: "Palvelinvirhe chatissa" });
+    res.status(500).json({
+      error: "GPT-pyyntö epäonnistui. Tarkista palvelimen tila tai yritä myöhemmin uudelleen."
+    });
   }
 });
+
 
 // ✅ Voice endpoint (ElevenLabs TTS)
 app.post("/api/voice", async (req, res) => {
