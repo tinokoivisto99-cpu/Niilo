@@ -3,12 +3,14 @@ import dotenv from "dotenv";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
+import fetch from "node-fetch";
 
 dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use(express.static(path.join(__dirname, "public")));
@@ -30,27 +32,35 @@ if (!VOICE_ENABLED) {
   console.warn("ℹ️  ElevenLabs-ääni ei ole käytössä (ELEVEN_API_KEY tai VOICE_ID puuttuu).");
 }
 
-// ✅ Perusreitti testaukseen
+// --- Niilon persoonan määrittely ---
+const niiloPersona = `
+Olet Niilo, Novyra Technologiesin tekoälyassistentti.
+Puhu rennosti mutta ammattitaitoisesti.
+Et tee yritysmyyntiä etkä buukkaa B2B-tapaamisia.
+Autat asiakkaita ajanvarauksissa ja palvelukysymyksissä, kuten:
+- hammaslääkärin, autohuollon, ravintolan, kampaamon tai hieronnan ajanvaraus
+- allergiakysymykset, aukioloajat, hinnastot ja yleiset tiedot
+Tunnet Novyra Technologiesin palvelut:
+- Niilo Chatbot: tekoäly joka vastaa asiakkaiden kysymyksiin 24/7
+- Niilo CRM: järjestelmä joka tallentaa asiakastiedot ja varaukset
+- Älykkäät verkkosivut: sivut jotka keskustelevat ja ohjaavat asiakkaita
+- Monikanavainen ajanvaraus: asiakkaat voivat varata aikoja puhelimitse, tekstiviestillä tai Metan alustoilla
+Vastaa asiakkaalle hänen kielellään (tunnista kieli automaattisesti).
+Jos käyttäjä kysyy varauksesta, kysy vain olennaiset tiedot ja vahvista ystävällisesti.
+Jos kysymys liittyy allergioihin, palveluihin tai aukioloaikoihin, vastaa suoraan ja kohteliaasti.
+`;
+
+// ✅ Healthcheck
 app.get("/health", (req, res) => {
-  res.json({
-    status: "ok",
-    chatEnabled: CHAT_ENABLED,
-    voiceEnabled: VOICE_ENABLED,
-  });
+  res.json({ status: "ok", chatEnabled: CHAT_ENABLED, voiceEnabled: VOICE_ENABLED });
 });
 
 // ✅ Chat endpoint (GPT)
 app.post("/api/chat", async (req, res) => {
   try {
     const { message } = req.body;
-
-    if (!message) {
-      return res.status(400).json({ error: "Message puuttuu!" });
-    }
-
-    if (!CHAT_ENABLED) {
-      return res.status(503).json({ error: "OPENAI_API_KEY puuttuu palvelimelta." });
-    }
+    if (!message) return res.status(400).json({ error: "Message puuttuu!" });
+    if (!CHAT_ENABLED) return res.status(503).json({ error: "OPENAI_API_KEY puuttuu palvelimelta." });
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -61,7 +71,7 @@ app.post("/api/chat", async (req, res) => {
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "Olet ystävällinen ja älykäs avustaja." },
+          { role: "system", content: niiloPersona },
           { role: "user", content: message }
         ],
         temperature: 0.7
@@ -69,48 +79,28 @@ app.post("/api/chat", async (req, res) => {
     });
 
     const data = await response.json();
-
     if (!response.ok) {
       console.error("GPT API virhe:", data);
-
-      // ✅ Lisätty: tarkempi virheenkäsittely
-      if (data?.error?.code === "insufficient_quota") {
-        return res.status(503).json({
-          error: "Palvelussa on hetkellinen ruuhka. Yritä uudelleen myöhemmin."
-        });
-      }
-
       const status = response.status === 401 ? 502 : 500;
       return res.status(status).json({ error: "GPT-pyyntö epäonnistui" });
     }
 
     const reply = data.choices?.[0]?.message?.content || "Ei vastausta.";
     res.json({ reply });
-
   } catch (error) {
     console.error("Chat endpoint error:", error);
-    res.status(500).json({
-      error: "GPT-pyyntö epäonnistui. Tarkista palvelimen tila tai yritä myöhemmin uudelleen."
-    });
+    res.status(500).json({ error: "GPT-pyyntö epäonnistui." });
   }
 });
 
-
-// ✅ Voice endpoint (ElevenLabs TTS)
+// ✅ Voice endpoint (tekstistä puheeksi)
 app.post("/api/voice", async (req, res) => {
   try {
     const { text } = req.body;
-
-    if (!text) {
-      return res.status(400).json({ error: "Teksti puuttuu!" });
-    }
-
-    if (!VOICE_ENABLED) {
-      return res.status(503).json({ error: "ElevenLabs ei ole konfiguroitu." });
-    }
+    if (!text) return res.status(400).json({ error: "Teksti puuttuu!" });
+    if (!VOICE_ENABLED) return res.status(503).json({ error: "ElevenLabs ei ole konfiguroitu." });
 
     const elevenlabsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`;
-
     const response = await fetch(elevenlabsUrl, {
       method: "POST",
       headers: {
@@ -121,43 +111,94 @@ app.post("/api/voice", async (req, res) => {
       body: JSON.stringify({
         text,
         model_id: "eleven_turbo_v2",
-        voice_settings: {
-          stability: 0.4,
-          similarity_boost: 0.8
-        }
+        voice_settings: { stability: 0.4, similarity_boost: 0.8 }
       })
     });
 
     if (!response.ok) {
       const err = await response.text();
       console.error("ElevenLabs virhe:", err);
-      const status = response.status === 401 ? 502 : 500;
-      return res.status(status).json({ error: "TTS-pyyntö epäonnistui" });
+      return res.status(500).json({ error: "TTS-pyyntö epäonnistui" });
     }
 
     const audioBuffer = await response.arrayBuffer();
-    res.set({
-      "Content-Type": "audio/mpeg",
-      "Content-Length": audioBuffer.byteLength
-    });
+    res.set({ "Content-Type": "audio/mpeg", "Content-Length": audioBuffer.byteLength });
     res.send(Buffer.from(audioBuffer));
-
   } catch (error) {
     console.error("Voice endpoint error:", error);
     res.status(500).json({ error: "Palvelinvirhe äänessä" });
   }
 });
-// ✅ Lokien tallennus Novyra CRM:ään
+
+// ✅ Voice-call endpoint (puhelinvastaus)
+app.post("/api/voice-call", async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ error: "Puheenteksti puuttuu!" });
+
+    // 1. GPT vastaa puheeseen Niilon tyylillä
+    const gptResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: niiloPersona },
+          { role: "user", content: message }
+        ],
+        temperature: 0.7
+      })
+    });
+
+    const gptData = await gptResponse.json();
+    if (!gptResponse.ok) {
+      console.error("GPT virhe puhelussa:", gptData);
+      return res.status(500).json({ error: "GPT-puhelu epäonnistui." });
+    }
+
+    const reply = gptData.choices?.[0]?.message?.content || "En valitettavasti kuullut kysymystäsi kunnolla.";
+
+    // 2. Muutetaan vastaus puheeksi (TTS)
+    const elevenlabsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`;
+    const ttsResponse = await fetch(elevenlabsUrl, {
+      method: "POST",
+      headers: {
+        "Accept": "audio/mpeg",
+        "Content-Type": "application/json",
+        "xi-api-key": ELEVEN_API_KEY
+      },
+      body: JSON.stringify({
+        text: reply,
+        model_id: "eleven_turbo_v2",
+        voice_settings: { stability: 0.4, similarity_boost: 0.8 }
+      })
+    });
+
+    if (!ttsResponse.ok) {
+      const err = await ttsResponse.text();
+      console.error("TTS-virhe puhelussa:", err);
+      return res.status(500).json({ error: "Äänivastaus epäonnistui." });
+    }
+
+    const audioBuffer = await ttsResponse.arrayBuffer();
+    res.set({ "Content-Type": "audio/mpeg", "Content-Length": audioBuffer.byteLength });
+    res.send(Buffer.from(audioBuffer));
+  } catch (error) {
+    console.error("Voice-call endpoint error:", error);
+    res.status(500).json({ error: "Puheluvastaus epäonnistui." });
+  }
+});
+
+// ✅ Lokien tallennus CRM:ään
 app.post("/api/log", async (req, res) => {
   try {
     const { type, message, user, meta } = req.body;
-
-    if (!type || !message) {
-      return res.status(400).json({ error: "type ja message vaaditaan." });
-    }
+    if (!type || !message) return res.status(400).json({ error: "type ja message vaaditaan." });
 
     const crmUrl = process.env.CRM_API_URL || "https://novyracrm.com/api/logs";
-
     const response = await fetch(crmUrl, {
       method: "POST",
       headers: {
@@ -188,6 +229,5 @@ app.post("/api/log", async (req, res) => {
 
 // --- SERVER ---
 app.listen(PORT, () => {
-  console.log(`✅ Serveri käynnissä portissa ${PORT}`);
+  console.log(`✅ Niilo-botti käynnissä portissa ${PORT}`);
 });
-
